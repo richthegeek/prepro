@@ -85,7 +85,6 @@ function prepro_pre_render($elements) {
 				// unset($elements['#items'][$key]); # shouldn't unset here? .css might fail here..
 				continue;
 			}
-
 			# ensure we have a unique filename.
 			if (isset($filenames[$name])) {
 				$name = $name . '-' . substr(drupal_hash_base64($output), 0, 6);
@@ -150,6 +149,7 @@ function _prepro_compile($file) {
 	}
 
 	if ($found && isset($compiler)) {
+		print "comp " . $file['basename'] . "<br>\n";
 		$additional = isset($settings['additional'][$compiler]) ? $settings['additional'][$compiler] : array();
 		return module_invoke($compiler, 'css_preprocess_' . $name, $file, $additional, $settings);
 	}
