@@ -29,13 +29,13 @@ function prepro_element_info_alter(&$type) {
  * Helper function for getting settings for prepro.
  */
 function _prepro_get_settings($overwrite = array()) {
-	$defaults = $overwrite + array(
+	return variable_get('prepro', array()) + $overwrite + array(
 		'filetypes' => array(),
 		'compile_method' => 'cache',
 		'cache_location' => 'public://prepro',
-		'cache' => array()
+		'cache' => array(),
+		'additional' => array(),
 	);
-	return variable_get('prepro', $defaults);
 }
 
 
@@ -53,6 +53,7 @@ function _prepro_get_settings($overwrite = array()) {
 function prepro_pre_render($elements) {
 	$settings = _prepro_get_settings();
 	$filenames = array();
+	$filetypes = _prepro_get_types();
 	$map =& $settings['cache'];
 	$original = $map;
 
@@ -64,6 +65,10 @@ function prepro_pre_render($elements) {
 		$filename = $file['data'];
 		$file['extension'] = $ext = substr($filename, strrpos($filename, '.') + 1); # path/to/lol.sass => sass
 		$file['basename']  = $name = substr(substr($filename, strrpos($filename, '/') + 1), 0, -1 - strlen($ext)); # path/to/lol.sass => lol
+
+		if (!isset($filetypes[$ext])) {
+			continue;
+		}
 
 		// If the file is set to recompile on every page load then we don't want
 		// it to be aggregated.
@@ -110,7 +115,6 @@ function prepro_pre_render($elements) {
 			$map[$hash] = $path;
 		}
 	}
-
 	// If $map and $original don't match anymore that means we need to update the
 	// CSS cache.
 	if ($original !== $map) {
@@ -119,42 +123,47 @@ function prepro_pre_render($elements) {
 	return $elements;
 }
 
-function _prepro_compile($file) {
-	$hook = 'css_preprocessor_info';
-	$settings = _prepro_get_settings();
-	$compilers = module_implements($hook);
-	$ext = $file['extension'];
-	$found = FALSE;
-
-	if (isset($settings['filetypes'][$ext])) {
-		$name = $settings['filetypes'][$ext];
-		foreach ($compilers as $compiler) {
-			$info = module_invoke($compiler, $hook);
-			if (isset($info[$name]) && in_array($ext, $info[$name])) {
-				$found = TRUE;
-				break;
-			}
-		}
-	}
-	else {
-		foreach ($compilers as $compiler) {
-			$info = module_invoke($compiler, $hook);
-			foreach ($info as $name => $filetypes) {
-				if (in_array($ext, $filetypes)) {
-					$found = TRUE;
-					break;
+/**
+ * Helper, returns an inverted list of preprocessors, keyed by filetype.
+ */
+function _prepro_get_types() {
+	$types =& drupal_static(__FUNCTION__, array());
+	if (empty($types)) {
+		$hook = 'css_preprocessor_info';
+		foreach (module_implements($hook) as $module) {
+			foreach (module_invoke($module, $hook) as $name => $info) {
+				$info['machine_name'] = $name;
+				$info['module'] = $module;
+				$info += array('callback' => 'css_preprocess_' . $name);
+				foreach ($info['filetypes'] as $type) {
+					$types += array($type => array());
+					$types[$type][$name] = $info;
 				}
 			}
 		}
 	}
+	return $types;
+}
 
-	if ($found && isset($compiler)) {
-		print "comp " . $file['basename'] . "<br>\n";
-		$additional = isset($settings['additional'][$compiler]) ? $settings['additional'][$compiler] : array();
-		return module_invoke($compiler, 'css_preprocess_' . $name, $file, $additional, $settings);
+function _prepro_compile($file) {
+	$hook = 'css_preprocessor_info';
+	$settings = _prepro_get_settings();
+	$types = _prepro_get_types();
+	$ext = $file['extension'];
+
+	if (isset($settings['filetypes'][$ext])) {
+		$name = $settings['filetypes'][$ext];
+		if (isset($types[$ext][$name])) {
+			$info = $types[$ext][$name];
+		}
+	}
+	if (!isset($info)) {
+		$info = current($types[$ext]);
 	}
 
-	return NULL;
+	$compiler = $info['machine_name'];
+	$settings['additional'] += array($compiler => array());
+	return module_invoke($info['module'], $info['callback'], $file, $settings['additional'][$compiler], $settings);
 }
 
 /**
