@@ -29,12 +29,11 @@ function prepro_element_info_alter(&$type) {
  * Helper function for getting settings for prepro.
  */
 function _prepro_get_settings($overwrite = array()) {
-	return variable_get('prepro', array()) + $overwrite + array(
+	return $overwrite + variable_get('prepro', array()) + array(
 		'filetypes' => array(),
-		'compile_method' => 'cache',
-		'cache_location' => 'public://prepro',
-		'cache' => array(),
 		'additional' => array(),
+		'cache' => array(),
+		'cache_location' => 'public://prepro',
 	);
 }
 
@@ -69,6 +68,12 @@ function prepro_pre_render($elements) {
 		if (!isset($filetypes[$ext])) {
 			continue;
 		}
+		$settings['filetypes'] += array(
+			$ext => array(
+				'cache' => 'cache',
+				'preprocessor' => NULL
+			),
+		);
 
 		// If the file is set to recompile on every page load then we don't want
 		// it to be aggregated.
@@ -85,7 +90,7 @@ function prepro_pre_render($elements) {
 		// hash value) changed, if the file doesn't exist, or if we are in development
 		// mode. NOTE: You can use the 'recompile' array for your CSS files to cache
 		// them based on advanced criteria.
-		if ($settings['compile_method'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
+		if ($settings['filetypes'][$ext]['cache'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
 			if (!$output = _prepro_compile($file)) {
 				// unset($elements['#items'][$key]); # shouldn't unset here? .css might fail here..
 				continue;
@@ -101,7 +106,7 @@ function prepro_pre_render($elements) {
 				file_prepare_directory($settings['cache_location'], FILE_CREATE_DIRECTORY);
 			}
 			$filenames[$name] = true;
-			if (!file_exists($path) && !file_unmanaged_save_data($output, $path, FILE_EXISTS_REPLACE)) {
+			if (!file_exists($path) || !file_unmanaged_save_data($output, $path, FILE_EXISTS_REPLACE)) {
 				unset($elements['#items'][$key]);
 				continue;
 			}
@@ -152,7 +157,7 @@ function _prepro_compile($file) {
 	$ext = $file['extension'];
 
 	if (isset($settings['filetypes'][$ext])) {
-		$name = $settings['filetypes'][$ext];
+		$name = $settings['filetypes'][$ext]['preprocessor'];
 		if (isset($types[$ext][$name])) {
 			$info = $types[$ext][$name];
 		}

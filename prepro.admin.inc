@@ -4,44 +4,75 @@
 
 function prepro_admin_form($form_id, &$form_state) {
   $types = _prepro_get_types();
-  print_r($types);
+  $settings = _prepro_get_settings();
+  $selected = array(); # keep track of chosen preprocs for deciding wether a fieldset is open by default
+
+  $rows = array();
+  foreach ($types as $format => $processors) {
+    $proc_list = array();
+    foreach ($processors as $name => $proc) {
+      $proc_list[$name] = $proc['label'];
+    }
+    $settings['filetypes'] += array(
+      $format => array(
+        'preprocessor' => current(array_keys($proc_list)),
+        'cache' => 'cache',
+      ),
+    );
+    $selected[] = $settings['filetypes'][$format]['preprocessor'];
+    $rows[] = array(
+      'name' => '.' . $format,
+      'processor' => count($proc_list) == 1
+        ? $proc['label']
+        : array('data' => array(
+          '#name' => 'filetypes[' . $format . '][preprocessor]',
+          '#type' => 'select',
+          '#options' => $proc_list,
+          '#value' => $settings['filetypes'][$format]['preprocessor'],
+        )
+      ),
+      'cache' => array('data' => array(
+        '#name' => 'filetypes[' . $format . '][cache]',
+        '#type' => 'select',
+        '#options' => array(
+          'cache' => 'Cached, reprocessed on cache-clear',
+          'onload' => 'Uncached, reprocessed on every page load',
+        ),
+        '#value' => $settings['filetypes'][$format]['cache'],
+      )),
+    );
+  }
 
   $form = array();
-  $form['prepro'] = array(
+  $form['filetypes'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Development settings for the SASSY module'),
-  );
-  $form['sassy']['sassy_devel'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Recompile all SASS / SCSS files on every page request.'),
-    '#description' => t('Disables the caching of SASS / SCSS files. Useful for when regularly changing the stylesheets (during theme development).'),
-    '#default_value' => variable_get('sassy_devel', FALSE),
-  );
-  $form['sassy']['sassy_debug'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Include debug information in output'),
-    '#description' => t('Should the compiler include debugging text, ' . l('usable by Firebug', 'https://github.com/nex3/firesass') . ' for enhanced debugging.'),
-    '#default_value' => variable_get('sassy_debug', FALSE),
-  );
-  $form['sassy']['sassy_watchdog'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Pass @warn and @debug to Watchdog'),
-    '#description' => t('Should the compiler pass results of @warn and @debug directives in the parsed files to the Drupal Watchdog system.'),
-    '#default_value' => variable_get('sassy_watchhdog', FALSE),
+    '#title' => t('Filetype-specific settings'),
+    'table' => array(
+      '#theme' => 'table',
+      '#header' => array('Format', 'Pre-processor', 'Caching'),
+      '#rows' => $rows,
+    )
   );
 
-  $form['sassy']['sassy_style'] = array(
-    '#type' => 'select',
-    '#title' => 'Output style',
-    '#description' => t('What style of output should Sassy use.'),
-    '#options' => array(
-      'nested' => 'Nested: Each property+selector takes up 1 line, selector indentation reflects nesting depth.',
-      'expanded' => 'Expanded: Each property+selector takes up 1 line, no selector indentation.',
-      'compact' => 'Compact: Each selector takes up 1 line with properties on the same line. No indentation.',
-      'compressed' => 'Compressed: Almost no whitespace, designed to be as space-efficient as possible.',
-    ),
-    '#default_value' => variable_get('sassy_style', 'nested'),
-  );
+  foreach (module_implements('css_preprocessor_settings_form') as $module) {
+    $procs = module_invoke($module, 'css_preprocessor_info');
+    $form[$module] = array();
+    foreach ($procs as $proc => $info) {
+      $settings['additional'] += array($proc => array());
+      $result = module_invoke($module, 'css_preprocessor_settings_form', $settings['additional'][$proc], $settings, $proc);
+      if ($result) {
+        _prepro_admin_form_alter_name($result, $proc);
+        $form[$module][$proc] = array(
+          '#type' => 'fieldset',
+          '#collapsible' => TRUE,
+          '#collapsed' => !in_array($proc, $selected),
+          '#title' => $info['label'],
+          '#name' => $proc,
+          'fields' => $result
+        );
+      }
+    }
+  }
 
   $form['submit'] = array(
     '#type' => 'submit',
@@ -51,11 +82,28 @@ function prepro_admin_form($form_id, &$form_state) {
   return $form;
 }
 
-function prepro_admin_form_submit($form, $form_state) {
-  extract($form_state['values']);
-  foreach (array('sassy_devel', 'sassy_debug', 'sassy_watchdog', 'sassy_style') as $var) {
-    variable_set($var, $$var);
+function _prepro_admin_form_alter_name(&$array, $proc) {
+  foreach ($array as $key => $value) {
+    if ($key{0} != '#') {
+      if (!isset($value['#name'])) {
+        $value['#name'] = 'additional[' . $proc . '][' . $key . ']';
+      }
+      else {
+        $value['#name'] = preg_replace('/^([^\[]+)(\[.+)?/', 'additional[' . $proc . '][$1]$2', $value['#name']);
+      }
+      if (is_array($value)) {
+        _prepro_admin_form_alter_name($value, $proc);
+      }
+    }
+    $array[$key] = $value;
   }
+}
 
-  drupal_set_message('Sassy settings have been saved');
+function prepro_admin_form_submit($form, $form_state) {
+  $settings = _prepro_get_settings(array(
+    'additional' => $form_state['input']['additional'],
+    'filetypes' => $form_state['input']['filetypes']
+  ));
+  variable_set('prepro', $settings);
+  drupal_set_message('Prepro settings have been saved');
 }
