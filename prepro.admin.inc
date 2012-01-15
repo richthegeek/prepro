@@ -22,15 +22,12 @@ function prepro_admin_form($form_id, &$form_state) {
     $selected[] = $settings['filetypes'][$format]['preprocessor'];
     $rows[] = array(
       'name' => '.' . $format,
-      'processor' => count($proc_list) == 1
-        ? $proc['label']
-        : array('data' => array(
-          '#name' => 'filetypes[' . $format . '][preprocessor]',
-          '#type' => 'select',
-          '#options' => $proc_list,
-          '#value' => $settings['filetypes'][$format]['preprocessor'],
-        )
-      ),
+      'processor' => array('data' => array(
+        '#name' => 'filetypes[' . $format . '][preprocessor]',
+        '#type' => 'select',
+        '#options' => $proc_list,
+        '#value' => $settings['filetypes'][$format]['preprocessor'],
+      )),
       'cache' => array('data' => array(
         '#name' => 'filetypes[' . $format . '][cache]',
         '#type' => 'select',

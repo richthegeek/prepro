@@ -32,7 +32,6 @@ function _prepro_get_settings($overwrite = array()) {
 	return $overwrite + variable_get('prepro', array()) + array(
 		'filetypes' => array(),
 		'additional' => array(),
-		'cache' => array(),
 		'cache_location' => 'public://prepro',
 	);
 }
@@ -51,9 +50,10 @@ function _prepro_get_settings($overwrite = array()) {
  */
 function prepro_pre_render($elements) {
 	$settings = _prepro_get_settings();
-	$filenames = array();
 	$filetypes = _prepro_get_types();
-	$map =& $settings['cache'];
+	$filenames = array();
+	$map = cache_get('prepro:map');
+	$map = $map ? $map->data : array();
 	$original = $map;
 
 	foreach ($elements['#items'] as $key => $file) {
@@ -61,9 +61,9 @@ function prepro_pre_render($elements) {
 			continue;
 		}
 
-		$filename = $file['data'];
-		$file['extension'] = $ext = substr($filename, strrpos($filename, '.') + 1); # path/to/lol.sass => sass
-		$file['basename']  = $name = substr(substr($filename, strrpos($filename, '/') + 1), 0, -1 - strlen($ext)); # path/to/lol.sass => lol
+		preg_match('/([^\/]+?)\.([^\.\/]+)$/', $file['data'], $match);
+		$file['basename']  = $name = $match[1]; # path/to/lol.sass => lol
+		$file['extension'] = $ext = $match[2]; # path/to/lol.sass => sass
 
 		if (!isset($filetypes[$ext])) {
 			continue;
@@ -92,7 +92,9 @@ function prepro_pre_render($elements) {
 		// them based on advanced criteria.
 		if ($settings['filetypes'][$ext]['cache'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
 			if (!$output = _prepro_compile($file)) {
-				// unset($elements['#items'][$key]); # shouldn't unset here? .css might fail here..
+				if ($ext != 'css') {
+					unset($elements['#items'][$key]);
+				}
 				continue;
 			}
 			# ensure we have a unique filename.
@@ -123,7 +125,7 @@ function prepro_pre_render($elements) {
 	// If $map and $original don't match anymore that means we need to update the
 	// CSS cache.
 	if ($original !== $map) {
-		variable_set('prepro', $settings);
+		cache_set('prepro:map', $map, 'cache', CACHE_TEMPORARY);
 	}
 	return $elements;
 }
@@ -151,6 +153,7 @@ function _prepro_get_types() {
 }
 
 function _prepro_compile($file) {
+	print "comp " . $file['data'] . "\n";
 	$hook = 'css_preprocessor_info';
 	$settings = _prepro_get_settings();
 	$types = _prepro_get_types();
