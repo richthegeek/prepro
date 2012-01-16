@@ -32,7 +32,6 @@ function _prepro_get_settings($overwrite = array()) {
 	return $overwrite + variable_get('prepro', array()) + array(
 		'filetypes' => array(),
 		'additional' => array(),
-		'cache_location' => 'public://prepro',
 	);
 }
 
@@ -68,12 +67,14 @@ function prepro_pre_render($elements) {
 		if (!isset($filetypes[$ext])) {
 			continue;
 		}
-		$settings['filetypes'] += array(
-			$ext => array(
-				'cache' => 'cache',
-				'preprocessor' => NULL
-			),
+
+		$settings['filetypes'] += array($ext => array());
+		$settings['filetypes'][$ext] += array(
+			'cache' => 'cache',
+			'cache_location' => 'public://prepro/',
+			'preprocessor' => NULL,
 		);
+		$additional = $settings['filetypes'][$ext];
 
 		// If the file is set to recompile on every page load then we don't want
 		// it to be aggregated.
@@ -90,7 +91,7 @@ function prepro_pre_render($elements) {
 		// hash value) changed, if the file doesn't exist, or if we are in development
 		// mode. NOTE: You can use the 'recompile' array for your CSS files to cache
 		// them based on advanced criteria.
-		if ($settings['filetypes'][$ext]['cache'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
+		if ($additional['cache'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
 			if (!$output = _prepro_compile($file)) {
 				if ($ext != 'css') {
 					unset($elements['#items'][$key]);
@@ -101,14 +102,14 @@ function prepro_pre_render($elements) {
 			if (isset($filenames[$name])) {
 				$name = $name . '-' . substr(drupal_hash_base64($output), 0, 6);
 			}
-			$path = $settings['cache_location'] . '/' . $name . '.css';
+			$path = $additional['cache_location'] . '/' . $name . '.css';
 
 			// Create the CSS file.
 			if (empty($filenames)) {
-				file_prepare_directory($settings['cache_location'], FILE_CREATE_DIRECTORY);
+				file_prepare_directory($additional['cache_location'], FILE_CREATE_DIRECTORY);
 			}
 			$filenames[$name] = true;
-			if (!file_exists($path) || !file_unmanaged_save_data($output, $path, FILE_EXISTS_REPLACE)) {
+			if (!file_unmanaged_save_data($output, $path, FILE_EXISTS_REPLACE)) {
 				unset($elements['#items'][$key]);
 				continue;
 			}
@@ -153,7 +154,6 @@ function _prepro_get_types() {
 }
 
 function _prepro_compile($file) {
-	print "comp " . $file['data'] . "\n";
 	$hook = 'css_preprocessor_info';
 	$settings = _prepro_get_settings();
 	$types = _prepro_get_types();

@@ -1,23 +1,24 @@
 <?php
 
-
-
+/**
+ * Callback for Prepro settings page - compiles a table of filetype-specific settings
+ * and any preprocessor-specific settings available.
+ */
 function prepro_admin_form($form_id, &$form_state) {
   $types = _prepro_get_types();
   $settings = _prepro_get_settings();
   $selected = array(); # keep track of chosen preprocs for deciding wether a fieldset is open by default
-
   $rows = array();
   foreach ($types as $format => $processors) {
     $proc_list = array();
     foreach ($processors as $name => $proc) {
       $proc_list[$name] = $proc['label'];
     }
-    $settings['filetypes'] += array(
-      $format => array(
-        'preprocessor' => current(array_keys($proc_list)),
-        'cache' => 'cache',
-      ),
+    $settings['filetypes'] += array($format => array());
+    $settings['filetypes'][$format] += array(
+      'preprocessor' => current(array_keys($proc_list)),
+      'cache' => 'cache',
+      'cache_location' => 'public://prepro/'
     );
     $selected[] = $settings['filetypes'][$format]['preprocessor'];
     $rows[] = array(
@@ -37,6 +38,11 @@ function prepro_admin_form($form_id, &$form_state) {
         ),
         '#value' => $settings['filetypes'][$format]['cache'],
       )),
+      'cache_location' => array('data' => array(
+        '#name' => 'filetypes[' . $format . '][cache_location]',
+        '#type' => 'textfield',
+        '#value' => $settings['filetypes'][$format]['cache_location']
+      )),
     );
   }
 
@@ -46,7 +52,7 @@ function prepro_admin_form($form_id, &$form_state) {
     '#title' => t('Filetype-specific settings'),
     'table' => array(
       '#theme' => 'table',
-      '#header' => array('Format', 'Pre-processor', 'Caching'),
+      '#header' => array('Format', 'Pre-processor', 'Caching', 'Cache Location'),
       '#rows' => $rows,
     )
   );
@@ -59,15 +65,24 @@ function prepro_admin_form($form_id, &$form_state) {
       $result = module_invoke($module, 'css_preprocessor_settings_form', $settings['additional'][$proc], $settings, $proc);
       if ($result) {
         _prepro_admin_form_alter_name($result, $proc);
-        $form[$module][$proc] = array(
-          '#type' => 'fieldset',
-          '#collapsible' => TRUE,
-          '#collapsed' => !in_array($proc, $selected),
-          '#title' => $info['label'],
-          '#name' => $proc,
-          'fields' => $result
-        );
+      } else {
+        foreach ($selected as $i => $v) {
+          if ($v == $proc) {
+            unset ($selected[$i]);
+          }
+        }
+        $info['label'] .= ' (no settings)';
+        $result = array();//
       }
+      
+      $form[$module][$proc] = array(
+        '#type' => 'fieldset',
+        '#collapsible' => TRUE,
+        '#collapsed' => !in_array($proc, $selected),
+        '#title' => $info['label'],
+        '#name' => $proc,
+        'fields' => $result
+      );
     }
   }
 
@@ -79,6 +94,10 @@ function prepro_admin_form($form_id, &$form_state) {
   return $form;
 }
 
+/**
+ * Helper: alters the #name attribute of all inputs to make them specific
+ * to the preprocessor (for example 'hello' to 'additional[sassy][hello]')
+ */
 function _prepro_admin_form_alter_name(&$array, $proc) {
   foreach ($array as $key => $value) {
     if ($key{0} != '#') {
@@ -96,6 +115,9 @@ function _prepro_admin_form_alter_name(&$array, $proc) {
   }
 }
 
+/**
+ * Submit handler for prepro admin form.
+ */
 function prepro_admin_form_submit($form, $form_state) {
   $settings = _prepro_get_settings(array(
     'additional' => $form_state['input']['additional'],

@@ -1,3 +1,5 @@
 name = Preprocessor
 description = Provides an API for modules to offer preprocessing for stylesheets
 core = 7.x
+
+configure = admin/config/media/prepro
