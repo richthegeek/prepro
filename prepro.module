@@ -185,5 +185,8 @@ function prepro_flush_caches() {
  */
 function prepro_clear_cache() {
 	$settings = _prepro_get_settings();
-	file_scan_directory($settings['cache_location'], '/.*/', array('callback' => 'drupal_delete_file_if_stale'));
+
+	foreach ($settings['filetypes'] as $type) {
+		file_scan_directory($type['cache_location'], '/.*/', array('callback' => 'drupal_delete_file_if_stale'));
+	}
 }
