@@ -187,6 +187,9 @@ function prepro_clear_cache() {
 	$settings = _prepro_get_settings();
 
 	foreach ($settings['filetypes'] as $type) {
+		$type += array(
+			'cache_location' => 'public://prepro/'
+		);
 		file_scan_directory($type['cache_location'], '/.*/', array('callback' => 'drupal_delete_file_if_stale'));
 	}
 }
