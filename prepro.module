@@ -171,7 +171,10 @@ function _prepro_compile($file) {
 
 	$compiler = $info['machine_name'];
 	$settings['additional'] += array($compiler => array());
-	return module_invoke($info['module'], $info['callback'], $file, $settings['additional'][$compiler], $settings);
+	if ($result = module_invoke($info['module'], $info['callback'], $file, $settings['additional'][$compiler], $settings)) {
+		_drupal_build_css_path(NULL, base_path() . dirname($file['data']) .'/');
+	    return preg_replace_callback('/url\([\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\)/i', '_drupal_build_css_path', $result);
+	}
 }
 
 /**
