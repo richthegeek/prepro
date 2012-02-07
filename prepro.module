@@ -171,9 +171,25 @@ function _prepro_compile($file) {
 
 	$compiler = $info['machine_name'];
 	$settings['additional'] += array($compiler => array());
-	if ($result = module_invoke($info['module'], $info['callback'], $file, $settings['additional'][$compiler], $settings)) {
+	$local = $settings['additional'][$compiler];
+
+	$file['contents'] = '';
+	if (!$contents = file_get_contents($file['data'])) {
+		watchdog('Prepro', 'Prepro could not find the file %file for compilation', array('%file' => $file['data']), WATCHDOG_ERROR);
+		return null;
+	} else {
+		drupal_alter('prepro_precompile', $contents, $file, $local);
+		drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
+
+		$file['contents'] = $contents;
+	}
+
+	if ($result = module_invoke($info['module'], $info['callback'], $file, $local, $settings)) {
 		_drupal_build_css_path(NULL, base_path() . dirname($file['data']) .'/');
-	    return preg_replace_callback('/url\([\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\)/i', '_drupal_build_css_path', $result);
+	    $result = preg_replace_callback('/url\([\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\)/i', '_drupal_build_css_path', $result);
+	    drupal_alter('prepro_postcompile', $result, $file, $local);
+	    drupal_alter('prepro_postcompile_' . $ext, $result, $file, $local);
+	    return $result;
 	}
 }
 

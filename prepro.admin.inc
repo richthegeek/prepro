@@ -61,20 +61,28 @@ function prepro_admin_form($form_id, &$form_state) {
     $procs = module_invoke($module, 'css_preprocessor_info');
     $form[$module] = array();
     foreach ($procs as $proc => $info) {
+      # use the "retrieve" and "prepare" funcs to get the form and allow the usual form handler functions
+      $form_id = $module . '_css_preprocessor_settings_form';
       $settings['additional'] += array($proc => array());
-      $result = module_invoke($module, 'css_preprocessor_settings_form', $settings['additional'][$proc], $settings, $proc);
+      $form_state = array('prepro' => array('local' => $settings['additional'][$proc], 'global' => $settings, 'processor' => $proc)) + form_state_defaults();
+      $result = drupal_retrieve_form($form_id, $form_state);
+      drupal_prepare_form($form_id, $result, $form_state);
+      // if we got the form, alter the form element names to make saving v simple.
       if ($result) {
         _prepro_admin_form_alter_name($result, $proc);
       } else {
+        // otherwise, remove the compiler from the "selected" list
         foreach ($selected as $i => $v) {
           if ($v == $proc) {
             unset ($selected[$i]);
           }
         }
+        // and change the label a wee bit.
         $info['label'] .= ' (no settings)';
         $result = array();//
       }
-      
+
+      // add the result to the page.
       $form[$module][$proc] = array(
         '#type' => 'fieldset',
         '#collapsible' => TRUE,
