@@ -107,6 +107,7 @@ function _prepro_process_assets($target_ext, &$items) {
 		preg_match('/([^\/]+?)\.([^\.\/]+)$/', $file['data'], $match);
 		$file['basename']  = $name = $match[1]; # path/to/lol.sass => lol
 		$file['extension'] = $ext = $match[2]; # path/to/lol.sass => sass
+		$file['target_extension'] = $target_ext;
 
 		if (!isset($filetypes[$ext])) {
 			continue;
@@ -136,6 +137,10 @@ function _prepro_process_assets($target_ext, &$items) {
 		// mode. NOTE: You can use the 'recompile' array for your CSS files to cache
 		// them based on advanced criteria.
 		if ($additional['cache'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
+			if ($additional['cache'] != 'cache') {
+				$message = t('Prepro - your @type files are being processed on every page load, this may cause slowdown on production servers. !link', array('@type' => strtoupper($target_ext), '!link' => l('Click here to change', 'admin/config/media/prepro/'. $target_ext)));
+				drupal_set_message($message, 'warning', false);
+			}
 			if (!$output = _prepro_compile($target_ext, $file)) {
 				if ($ext != 'css') {
 					unset($items[$key]);
@@ -185,7 +190,7 @@ function _prepro_get_types($ext = NULL) {
 	$types =& drupal_static(__FUNCTION__);
 	if (empty($types)) {
 		$types = array('css' => array(), 'js' => array());
-		foreach (array('css', 'js') as $file_ext) {
+		foreach ($types as $file_ext => $void) {
 			$hook = $file_ext . '_preprocessor_info';
 			foreach (module_implements($hook) as $module) {
 				foreach (module_invoke($module, $hook) as $name => $info) {
@@ -225,18 +230,17 @@ function _prepro_compile($target_ext, $file) {
 	$compiler = $info['machine_name'];
 	$settings['additional'] += array($compiler => array());
 	$local = $settings['additional'][$compiler];
+	$local['filetype'] = $settings['filetypes'][$file['extension']];
 
 	$file['contents'] = '';
 	if (!$contents = file_get_contents($file['data'])) {
 		watchdog('Prepro', 'Prepro could not find the file %file for compilation', array('%file' => $file['data']), WATCHDOG_ERROR);
 		return null;
-	} else {
-		drupal_alter('prepro_precompile', $contents, $file, $local);
-		drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
-		drupal_alter('prepro_precompile_' . $target_ext, $contents, $file, $local);
-
-		$file['contents'] = $contents;
 	}
+	drupal_alter('prepro_precompile', $contents, $file, $local);
+	drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
+	drupal_alter('prepro_precompile_' . $target_ext, $contents, $file, $local);
+	$file['contents'] = $contents;
 
 	if ($result = module_invoke($info['module'], $info['callback'], $file, $local, $settings)) {
 		if ($target_ext === 'css') {
