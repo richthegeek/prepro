@@ -14,7 +14,7 @@
  */
 function prepro_drush_command() {
   $items = array();
-
+ 
   $items['prepro'] = array(
     'description' => "Immediately processes a list of JS or CSS files according to the current prepro configuration.",
     'arguments' => array(
