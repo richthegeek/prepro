@@ -10,9 +10,23 @@ function prepro_menu() {
       'title' => 'Preprocessors',
       'description' => 'Configure media preprocessors',
       'page callback' => 'drupal_get_form',
-      'page arguments' => array('prepro_admin_form'),
+      'page arguments' => array('prepro_admin_form', 'css'),
       'access arguments' => array('administer site configuration'),
       'file' => 'prepro.admin.inc',
+    ),
+    'admin/config/media/prepro/css' => array(
+      'title' => 'CSS',
+      'description' => 'CSS preprocessors',
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+    ),
+    'admin/config/media/prepro/js' => array(
+      'title' => 'Javascript',
+      'description' => 'Javascript preprocessors',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('prepro_admin_form', 'js'),
+      'access arguments' => array('administer site configuration'),
+      'file' => 'prepro.admin.inc',
+      'type' => MENU_LOCAL_TASK,
     ),
   );
 }
@@ -28,11 +42,24 @@ function prepro_element_info_alter(&$type) {
 /**
  * Helper function for getting settings for prepro.
  */
-function _prepro_get_settings($overwrite = array()) {
-	return $overwrite + variable_get('prepro', array()) + array(
-		'filetypes' => array(),
-		'additional' => array(),
-	);
+function _prepro_get_settings($ext = NULL, $overwrite = array()) {
+	$settings = array();
+	if (!isset($ext) || $ext == 'css') {
+		$settings['css'] = variable_get('prepro', array()) + array(
+			'filetypes' => array(),
+			'additional' => array(),
+		);
+	}
+	if (!isset($ext) || $ext == 'js') {
+		$settings['js'] = variable_get('prepro_js', array()) + array(
+			'filetypes' => array(),
+			'additional' => array(),
+		);
+	}
+	if (isset($ext)) {
+		$settings = isset($settings[$ext]) ? $settings[$ext] : array();
+	}
+	return $overwrite + $settings;
 }
 
 
@@ -48,14 +75,31 @@ function _prepro_get_settings($overwrite = array()) {
  *   The modified (pre-rendered) $elements parameter.
  */
 function prepro_pre_render($elements) {
-	$settings = _prepro_get_settings();
-	$filetypes = _prepro_get_types();
+  _prepro_process_assets('css', $elements['#items']);
+	return $elements;
+}
+
+/**
+ * Implements hook_js_alter().
+ *
+ * Implement preprocessing of javascript files.
+ */
+function prepro_js_alter(&$js) {
+  _prepro_process_assets('js', $js);
+}
+
+/**
+ * Main helper function which preprocesses an array of css / js files.
+ */
+function _prepro_process_assets($target_ext, &$items) {
+	$settings = _prepro_get_settings($target_ext);
+	$filetypes = _prepro_get_types($target_ext);
 	$filenames = array();
-	$map = cache_get('prepro:map');
+	$map = cache_get('prepro:map:' . $target_ext);
 	$map = $map ? $map->data : array();
 	$original = $map;
 
-	foreach ($elements['#items'] as $key => $file) {
+	foreach ($items as $key => $file) {
 		if ($file['type'] != 'file') {
 			continue;
 		}
@@ -70,7 +114,7 @@ function prepro_pre_render($elements) {
 
 		$settings['filetypes'] += array($ext => array());
 		$settings['filetypes'][$ext] += array(
-			'cache' => 'cache',
+			'cache' => 'onload',
 			'cache_location' => 'public://prepro/',
 			'preprocessor' => NULL,
 		);
@@ -92,9 +136,9 @@ function prepro_pre_render($elements) {
 		// mode. NOTE: You can use the 'recompile' array for your CSS files to cache
 		// them based on advanced criteria.
 		if ($additional['cache'] != 'cache' || $file['recompile'] === TRUE || !isset($path) || !file_exists($path)) {
-			if (!$output = _prepro_compile($file)) {
+			if (!$output = _prepro_compile($target_ext, $file)) {
 				if ($ext != 'css') {
-					unset($elements['#items'][$key]);
+					unset($items[$key]);
 				}
 				continue;
 			}
@@ -102,7 +146,7 @@ function prepro_pre_render($elements) {
 			if (isset($filenames[$name])) {
 				$name = $name . '-' . substr(drupal_hash_base64($output), 0, 6);
 			}
-			$path = $additional['cache_location'] . '/' . $name . '.css';
+			$path = $additional['cache_location'] . '/' . $name . '.' . $target_ext;
 
 			// Create the CSS file.
 			if (empty($filenames)) {
@@ -110,14 +154,14 @@ function prepro_pre_render($elements) {
 			}
 			$filenames[$name] = true;
 			if (!file_unmanaged_save_data($output, $path, FILE_EXISTS_REPLACE)) {
-				unset($elements['#items'][$key]);
+				unset($items[$key]);
 				continue;
 			}
 		}
 
 		// Update the item in the stylesheets array.
-		$elements['#items'][$key] = $file;
-		$elements['#items'][$key]['data'] = $path;
+		$items[$key] = $file;
+		$items[$key]['data'] = $path;
 		if ($file['recompile'] !== TRUE) {
 			// Don't cache this item if it is set to recompile on every page load.
 			$map[$hash] = $path;
@@ -126,37 +170,46 @@ function prepro_pre_render($elements) {
 	// If $map and $original don't match anymore that means we need to update the
 	// CSS cache.
 	if ($original !== $map) {
-		cache_set('prepro:map', $map, 'cache', CACHE_TEMPORARY);
+		cache_set('prepro:map:' . $target_ext, $map, 'cache', CACHE_TEMPORARY);
 	}
-	return $elements;
+	return TRUE;
 }
 
 /**
  * Helper, returns an inverted list of preprocessors, keyed by filetype.
+ *
+ * @ext
+ *  Return file types for either just 'css' or 'js'.
  */
-function _prepro_get_types() {
-	$types =& drupal_static(__FUNCTION__, array());
+function _prepro_get_types($ext = NULL) {
+	$types =& drupal_static(__FUNCTION__);
 	if (empty($types)) {
-		$hook = 'css_preprocessor_info';
-		foreach (module_implements($hook) as $module) {
-			foreach (module_invoke($module, $hook) as $name => $info) {
-				$info['machine_name'] = $name;
-				$info['module'] = $module;
-				$info += array('callback' => 'css_preprocess_' . $name);
-				foreach ($info['filetypes'] as $type) {
-					$types += array($type => array());
-					$types[$type][$name] = $info;
+		$types = array('css' => array(), 'js' => array());
+		foreach (array('css', 'js') as $file_ext) {
+			$hook = $file_ext . '_preprocessor_info';
+			foreach (module_implements($hook) as $module) {
+				foreach (module_invoke($module, $hook) as $name => $info) {
+					$info['machine_name'] = $name;
+					$info['module'] = $module;
+					$info += array('callback' => $file_ext . '_preprocess_' . $name);
+					foreach ($info['filetypes'] as $type) {
+						$types[$file_ext] += array($type => array());
+						$types[$file_ext][$type][$name] = $info;
+					}
 				}
 			}
 		}
 	}
+	if (isset($ext)) {
+		return isset($types[$ext]) ? $types[$ext] : NULL;
+	}
 	return $types;
 }
 
-function _prepro_compile($file) {
-	$hook = 'css_preprocessor_info';
-	$settings = _prepro_get_settings();
-	$types = _prepro_get_types();
+function _prepro_compile($target_ext, $file) {
+	$hook = $target_ext . '_preprocessor_info';
+	$settings = _prepro_get_settings($target_ext);
+	$types = _prepro_get_types($target_ext);
 	$ext = $file['extension'];
 
 	if (isset($settings['filetypes'][$ext])) {
@@ -177,18 +230,36 @@ function _prepro_compile($file) {
 	if (!$contents = file_get_contents($file['data'])) {
 		watchdog('Prepro', 'Prepro could not find the file %file for compilation', array('%file' => $file['data']), WATCHDOG_ERROR);
 		return null;
+	} else {
+		drupal_alter('prepro_precompile', $contents, $file, $local);
+		drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
+		drupal_alter('prepro_precompile_' . $target_ext, $contents, $file, $local);
+
+		$file['contents'] = $contents;
 	}
-	
-	drupal_alter('prepro_precompile', $contents, $file, $local);
-	drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
-	$file['contents'] = $contents;
 
 	if ($result = module_invoke($info['module'], $info['callback'], $file, $local, $settings)) {
-		_drupal_build_css_path(NULL, base_path() . dirname($file['data']) .'/');
-	    $result = preg_replace_callback('/url\([\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\)/i', '_drupal_build_css_path', $result);
-	    drupal_alter('prepro_postcompile', $result, $file, $local);
-	    drupal_alter('prepro_postcompile_' . $ext, $result, $file, $local);
-	    return $result;
+		if ($target_ext === 'css') {
+		  _drupal_build_css_path(NULL, base_path() . dirname($file['data']) .'/');
+		  $result = preg_replace_callback('/url\([\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\)/i', '_drupal_build_css_path', $result);
+		}
+		drupal_alter('prepro_postcompile', $result, $file, $local);
+		drupal_alter('prepro_postcompile_' . $ext, $result, $file, $local);
+		drupal_alter('prepro_postcompile_' . $target_ext, $result, $file, $local);
+		return $result;
+	}
+}
+
+/**
+ * Implements hook_module_implements_alter().
+ */
+function prepro_module_implements_alter(&$implementations, $hook) {
+
+  // Move our hook_js_alter() after everyone else's for consistency.
+	if ($hook == 'js_alter') {
+		$group = $implementations['prepro'];
+		unset($implementations['prepro']);
+		$implementations['prepro'] = $group;
 	}
 }
 
@@ -204,10 +275,12 @@ function prepro_flush_caches() {
 function prepro_clear_cache() {
 	$settings = _prepro_get_settings();
 
-	foreach ($settings['filetypes'] as $type) {
-		$type += array(
-			'cache_location' => 'public://prepro/'
-		);
-		file_scan_directory($type['cache_location'], '/.*/', array('callback' => 'drupal_delete_file_if_stale'));
+  foreach ($settings as $ext => $ext_settings) {
+		foreach ($ext_settings['filetypes'] as $type) {
+			$type += array(
+				'cache_location' => 'public://prepro/'
+			);
+			file_scan_directory($type['cache_location'], '/.*/', array('callback' => 'drupal_delete_file_if_stale'));
+		}
 	}
 }

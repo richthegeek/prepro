@@ -4,9 +4,9 @@
  * Callback for Prepro settings page - compiles a table of filetype-specific settings
  * and any preprocessor-specific settings available.
  */
-function prepro_admin_form($form_id, &$form_state) {
-  $types = _prepro_get_types();
-  $settings = _prepro_get_settings();
+function prepro_admin_form($form_id, &$form_state, $ext = 'css') {
+  $types = _prepro_get_types($ext);
+  $settings = _prepro_get_settings($ext);
   $selected = array(); # keep track of chosen preprocs for deciding wether a fieldset is open by default
   $rows = array();
   foreach ($types as $format => $processors) {
@@ -17,7 +17,7 @@ function prepro_admin_form($form_id, &$form_state) {
     $settings['filetypes'] += array($format => array());
     $settings['filetypes'][$format] += array(
       'preprocessor' => current(array_keys($proc_list)),
-      'cache' => 'cache',
+      'cache' => 'onload',
       'cache_location' => 'public://prepro/'
     );
     $selected[] = $settings['filetypes'][$format]['preprocessor'];
@@ -47,6 +47,10 @@ function prepro_admin_form($form_id, &$form_state) {
   }
 
   $form = array();
+  $form['ext'] = array(
+    '#type' => 'value',
+    '#value' => $ext,
+  );
   $form['filetypes'] = array(
     '#type' => 'fieldset',
     '#title' => t('Filetype-specific settings'),
@@ -57,12 +61,12 @@ function prepro_admin_form($form_id, &$form_state) {
     )
   );
 
-  foreach (module_implements('css_preprocessor_settings_form') as $module) {
-    $procs = module_invoke($module, 'css_preprocessor_info');
+  foreach (module_implements($ext . '_preprocessor_settings_form') as $module) {
+    $procs = module_invoke($module, $ext . '_preprocessor_info');
     $form[$module] = array();
     foreach ($procs as $proc => $info) {
       # use the "retrieve" and "prepare" funcs to get the form and allow the usual form handler functions
-      $form_id = $module . '_css_preprocessor_settings_form';
+      $form_id = $module . '_' . $ext . '_preprocessor_settings_form';
       $settings['additional'] += array($proc => array());
       $form_state = array('prepro' => array('local' => $settings['additional'][$proc], 'global' => $settings, 'processor' => $proc)) + form_state_defaults();
       $result = drupal_retrieve_form($form_id, $form_state);
@@ -127,10 +131,15 @@ function _prepro_admin_form_alter_name(&$array, $proc) {
  * Submit handler for prepro admin form.
  */
 function prepro_admin_form_submit($form, $form_state) {
-  $settings = _prepro_get_settings(array(
+  $ext = $form_state['values']['ext'];
+  $settings = _prepro_get_settings($ext, array(
     'additional' => $form_state['input']['additional'],
     'filetypes' => $form_state['input']['filetypes']
   ));
-  variable_set('prepro', $settings);
+  $vname = 'prepro';
+  if ($ext == 'js') {
+    $vname .= '_js';
+  }
+  variable_set($vname, $settings);
   drupal_set_message('Prepro settings have been saved');
 }
