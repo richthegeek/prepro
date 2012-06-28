@@ -177,12 +177,11 @@ function _prepro_compile($file) {
 	if (!$contents = file_get_contents($file['data'])) {
 		watchdog('Prepro', 'Prepro could not find the file %file for compilation', array('%file' => $file['data']), WATCHDOG_ERROR);
 		return null;
-	} else {
-		drupal_alter('prepro_precompile', $contents, $file, $local);
-		drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
-
-		$file['contents'] = $contents;
 	}
+	
+	drupal_alter('prepro_precompile', $contents, $file, $local);
+	drupal_alter('prepro_precompile_' . $ext, $contents, $file, $local);
+	$file['contents'] = $contents;
 
 	if ($result = module_invoke($info['module'], $info['callback'], $file, $local, $settings)) {
 		_drupal_build_css_path(NULL, base_path() . dirname($file['data']) .'/');
