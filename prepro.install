@@ -4,7 +4,6 @@
  * Implementation of hook_uninstall().
  */
 function prepro_uninstall() {
+  prepro_flush_caches();
   variable_del('prepro');
-  variable_del('prepro_js');
-  file_unmanaged_delete_recursive('public://prepro');
 }
