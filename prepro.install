@@ -1,9 +1,22 @@
 <?php
 
 /**
+ * Implementation of hook_install().
+ */
+function prepro_install() {
+  $directory = 'public://prepro';
+  file_prepare_directory($directory, FILE_MODIFY_PERMISSIONS ^ FILE_CREATE_DIRECTORY);
+}
+
+/**
  * Implementation of hook_uninstall().
  */
 function prepro_uninstall() {
+  $cache = cache_get('prepro:map', 'cache');
+  if (isset($cache, $cache->data) && $cache = $cache->data) {
+    foreach ($cache as $hash => $file) {
+      file_unmanaged_delete($file);
+    }
+  }
   variable_del('prepro');
-  file_unmanaged_delete_recursive('public://prepro');
 }
