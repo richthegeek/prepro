@@ -1,5 +1,0 @@
-name = Prepro - Uncached
-description = Cache provider for prepro that forces recompile
-core = 7.x
-
-dependencies[] = prepro
