@@ -1,7 +1,22 @@
 <?php
+/**
+ * @file
+ */
 
 /**
- * Implementation of hook_install().
+ * Implements hook_schema().
+ */
+function prepro_schema() {
+  $schema = array();
+
+  $schema['cache_prepro'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_prepro']['description'] = 'Cache table for the Prepro module.';
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
  */
 function prepro_install() {
   $directory = 'public://prepro';
@@ -9,7 +24,7 @@ function prepro_install() {
 }
 
 /**
- * Implementation of hook_uninstall().
+ * Implements hook_uninstall().
  */
 function prepro_uninstall() {
   $cache = cache_get('prepro:map', 'cache');

@@ -1,4 +1,7 @@
 <?php
+/**
+ * @file
+ */
 
 /**
  * Callback for Prepro settings page - compiles a table of filetype-specific settings
@@ -11,7 +14,6 @@ function prepro_admin_form($form_id, &$form_state) {
   $selected = array(); // keep track of chosen preprocs for deciding wether a fieldset is open by default
   $rows = array();
 
-  $cache_options = array('' => 'Uncached: results are entirely uncached');
   foreach ($cachers as $key => $cacher) {
     $cache_options[$cacher['module'] . '/' . $key] = $cacher['title'] . ': ' . $cacher['description'];
   }
@@ -70,11 +72,12 @@ function prepro_admin_form($form_id, &$form_state) {
       // if we got the form, alter the form element names to make saving v simple.
       if ($result) {
         _prepro_admin_form_alter_name($result, $proc);
-      } else {
+      }
+      else {
         // otherwise, remove the compiler from the "selected" list
         foreach ($selected as $i => $v) {
           if ($v == $proc) {
-            unset ($selected[$i]);
+            unset($selected[$i]);
           }
         }
         // and change the label a wee bit.
@@ -87,7 +90,7 @@ function prepro_admin_form($form_id, &$form_state) {
         '#type' => 'fieldset',
         '#collapsible' => TRUE,
         '#collapsed' => !in_array($proc, $selected),
-        '#title' => $info['label'],
+        '#title' => filter_xss($info['label']),
         '#name' => $proc,
         'fields' => $result
       );
@@ -146,15 +149,16 @@ function prepro_admin_form_save($form, &$form_state) {
     }
   }
   variable_set('prepro', $settings);
-  drupal_set_message('Prepro settings have been saved');
+  drupal_set_message(t('Prepro settings have been saved'));
+  prepro_admin_form_cc($form, $form_state);
 }
 
 /**
  * Submit handler for clearing the cache from the prepro admin form
  */
 function prepro_admin_form_cc($form, &$form_state) {
-  prepro_flush_caches();
-  drupal_set_message('The Prepro cache has been cleared');
+  cache_clear_all('prepro:map', 'cache_prepro');
+  drupal_set_message(t('The Prepro cache has been cleared'));
 }
 
 
