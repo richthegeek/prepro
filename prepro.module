@@ -154,12 +154,12 @@ function _prepro_process_assets($type, &$items) {
 function prepro_preprocessor_cache_info() {
   $items = array();
 
-  $items['nocache'] = array(
+  $items['onload'] = array(
     'title' => 'Uncached',
     'description' => 'Recompiled on every pageload',
   );
 
-  $items['cacheclear'] = array(
+  $items['cache'] = array(
     'title' => 'Cached',
     'description' => 'Regenerated on standard Drupal cache clear.',
   );
@@ -173,9 +173,9 @@ function prepro_preprocessor_cache_info() {
 }
 
 /**
- * 'Is cached' callback for the 'nocache' cache method.
+ * 'Is cached' callback for the 'onload' cache method.
  */
-function prepro_is_cached_nocache($file, $type) {
+function prepro_is_cached_onload($file, $type) {
   $message = t('Prepro - your @type files are being processed on every page load, this may cause slowdown on production servers. !link', array(
     '@type' => drupal_strtoupper($file['extension']),
     '!link' => l('Click here to change', 'admin/config/media/prepro/' . $file['extension'])
@@ -185,9 +185,9 @@ function prepro_is_cached_nocache($file, $type) {
 }
 
 /**
- * 'Flush cache' callback for the 'cacheclear' cache method.
+ * 'Flush cache' callback for the 'cache' cache method.
  */
-function prepro_flush_cache_cacheclear(&$map, $file, $type) {
+function prepro_flush_cache_cache(&$map, $file, $type) {
   unset($map[$file['cache_key']]);
   cache_set('prepro:map', $map, 'cache_prepro', CACHE_PERMANENT);
 }

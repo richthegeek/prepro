@@ -35,3 +35,15 @@ function prepro_uninstall() {
   }
   variable_del('prepro');
 }
+
+/**
+ * Add 'cache_prepro' table.
+ */
+function prepro_update_7000() {
+  $schema = array();
+
+  $schema['cache_prepro'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_prepro']['description'] = 'Cache table for the Prepro module.';
+
+  db_create_table('cache_prepro', $schema['cache_prepro']);
+}
