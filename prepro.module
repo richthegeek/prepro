@@ -134,7 +134,8 @@ function _prepro_process_assets($type, &$items) {
     if ($item['recompile']) {
       $data = _prepro_compile($item);
 
-      if (file_prepare_directory(dirname($item['cache_file']), FILE_MODIFY_PERMISSIONS ^ FILE_CREATE_DIRECTORY) && file_put_contents($item['cache_file'], $data) !== FALSE) {
+      $directory = dirname($item['cache_file']);
+      if (file_prepare_directory($directory, FILE_MODIFY_PERMISSIONS ^ FILE_CREATE_DIRECTORY) && file_put_contents($item['cache_file'], $data) !== FALSE) {
         $items[$key]['data'] = $item['cache_file'];
         $map[$item['cache_key']] = $item;
         $map_changed = TRUE;
